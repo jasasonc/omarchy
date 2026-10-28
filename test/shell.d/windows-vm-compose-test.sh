@@ -515,11 +515,11 @@ for runtime in podman docker; do
     case "$1 ${2:-}" in
       "inspect --format={{.State.Status}}") echo running ;;
       "inspect --format={{.State.StartedAt.Unix}}")
-        [[ $runtime == podman ]] || return 1
+        [[ $runtime == "podman" ]] || return 1
         echo 1761664628
         ;;
       "inspect --format={{.State.StartedAt}}")
-        if [[ $runtime == podman ]]; then
+        if [[ $runtime == "podman" ]]; then
           echo "2026-10-28 16:17:08.31632738 +0100 CET"
         else
           echo "2026-10-28T15:17:08.31632738Z"
