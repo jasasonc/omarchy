@@ -72,12 +72,12 @@ dashboard_url() {
 # A remote client's gateway runs on another host, and the dashboard probe reads
 # it as not running. Installing a local one would write a token the remote
 # gateway rejects, so attach the terminal UI to the configured gateway instead.
-remote=false
-[[ $(jq -r '.gateway.mode // empty' "$HOME/.openclaw/openclaw.json" 2>/dev/null) == "remote" ]] && remote=true
-
-if [[ $remote == "true" ]]; then
-  [[ $tui == "true" ]] && exec openclaw tui "${message[@]}"
-  exec omarchy-launch-floating-terminal-with-presentation 'omarchy-launch-openclaw --tui'
+if [[ $(jq -r '.gateway.mode // empty' "$HOME/.openclaw/openclaw.json" 2>/dev/null) == "remote" ]]; then
+  if [[ $tui == "true" ]]; then
+    exec openclaw tui "${message[@]}"
+  else
+    exec omarchy-launch-floating-terminal-with-presentation 'omarchy-launch-openclaw --tui'
+  fi
 fi
 
 if ! url=$(dashboard_url); then
