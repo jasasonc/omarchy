@@ -197,8 +197,9 @@ sparse_output=$(OMARCHY_POWER_SUPPLY_PATH="$hold_dir/power" PATH="$hold_dir/bin:
 pass "battery status leaves out readings it doesn't have"
 
 # UPower reports its hwdb default limits even where the limit is off and the
-# firmware refuses it, so a disabled limit is not shown. The kernel's own
-# reading still is.
+# firmware refuses it, and prints charge-threshold-enabled only while the limit
+# is on. A supported limit without that line is not shown; an enabled one and
+# the kernel's own reading still are.
 disabled_dir="$tmp_dir/disabled"
 mkdir -p "$disabled_dir/bin" "$disabled_dir/power/BAT0" "$disabled_dir/power/ac"
 printf 'Mains\n' >"$disabled_dir/power/ac/type"
@@ -221,7 +222,6 @@ if [[ $1 == "-i" ]]; then
   percentage:           77%
   charge-start-threshold:        75%
   charge-end-threshold:          80%
-  charge-threshold-enabled:      no
   charge-threshold-supported:    yes
 INFO
   exit 0
@@ -235,4 +235,8 @@ disabled_output=$(OMARCHY_POWER_SUPPLY_PATH="$disabled_dir/power" PATH="$disable
 printf '85\n' >"$disabled_dir/power/BAT0/charge_control_end_threshold"
 kernel_output=$(OMARCHY_POWER_SUPPLY_PATH="$disabled_dir/power" PATH="$disabled_dir/bin:$PATH" "$ROOT/bin/omarchy-battery-status" --shell)
 grep -Fx $'threshold\t85%' <<<"$kernel_output" >/dev/null || fail "battery status leaves out a charge limit UPower says is off" "kernel limit lost: $kernel_output"
+mv "$disabled_dir/power/BAT0/charge_control_end_threshold" "$disabled_dir/kernel-threshold"
+sed -i 's/^  charge-threshold-supported:    yes$/  charge-threshold-enabled:      yes\n&/' "$disabled_dir/bin/upower"
+enabled_output=$(OMARCHY_POWER_SUPPLY_PATH="$disabled_dir/power" PATH="$disabled_dir/bin:$PATH" "$ROOT/bin/omarchy-battery-status" --shell)
+grep -Fx $'threshold\t75-80%' <<<"$enabled_output" >/dev/null || fail "battery status leaves out a charge limit UPower says is off" "enabled limit lost: $enabled_output"
 pass "battery status leaves out a charge limit UPower says is off"
