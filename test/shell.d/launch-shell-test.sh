@@ -41,7 +41,9 @@ cat >"$fake_bin/quickshell" <<'SH'
 #!/bin/bash
 
 printf '%s\n' "$*" >>"$OMARCHY_TEST_QS_LOG"
-grep '^SigIgn:' /proc/self/status >>"$OMARCHY_TEST_QS_SIGNAL_LOG"
+if [[ -n ${OMARCHY_TEST_QS_SIGNAL_LOG:-} ]]; then
+  grep '^SigIgn:' /proc/self/status >>"$OMARCHY_TEST_QS_SIGNAL_LOG"
+fi
 printf 'watcher=%s popup=%s background=%s\n' \
   "${QS_DISABLE_FILE_WATCHER:-unset}" "${QS_NO_RELOAD_POPUP:-unset}" "${OMARCHY_STARTUP_BACKGROUND:-unset}" >>"$OMARCHY_TEST_QS_ENV_LOG"
 
