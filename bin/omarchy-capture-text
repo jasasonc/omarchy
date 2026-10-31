@@ -4,6 +4,10 @@
 # omarchy:group=capture
 # omarchy:examples=omarchy capture text
 
+# A capture already picking its region owns the frozen screen; another one would
+# stack a second freeze over it.
+pgrep -x slurp >/dev/null && exit 0
+
 # Keep hyprpicker alive until after grim captures so the screenshot sees the
 # frozen overlay rather than live content shifting during teardown.
 cleanup_freeze() {
