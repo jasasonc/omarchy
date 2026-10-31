@@ -4,9 +4,11 @@
 # omarchy:group=capture
 # omarchy:examples=omarchy capture text
 
-# A capture already picking its region owns the frozen screen; another one would
-# stack a second freeze over it.
-pgrep -x slurp >/dev/null && exit 0
+# A capture already under way owns the frozen screen; another one would stack a
+# second freeze over it. The lock is this session's and is held from before the
+# freeze starts until this capture exits.
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/omarchy-capture-text.lock"
+flock -n 9 || exit 0
 
 # Keep hyprpicker alive until after grim captures so the screenshot sees the
 # frozen overlay rather than live content shifting during teardown.
@@ -15,7 +17,7 @@ cleanup_freeze() {
 }
 trap cleanup_freeze EXIT
 
-hyprpicker -r -z >/dev/null 2>&1 &
+hyprpicker -r -z >/dev/null 2>&1 9>&- &
 PID=$!
 sleep .1
 SELECTION=$(slurp 2>/dev/null)
