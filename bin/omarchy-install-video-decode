@@ -64,13 +64,29 @@ setup_chromium() {
 
 # Mesa's VA-API driver for nouveau crashes mpv instead of failing over to
 # software on GPUs older than Turing, which need video firmware nouveau can't
-# ship. Turing and newer decode through GSP firmware. A GPU with the NVIDIA
-# driver configured only runs nouveau until the next reboot.
+# ship. Turing and newer, from device ID 0x1e00, decode through GSP firmware. A
+# GPU with the NVIDIA driver configured only runs nouveau until the next reboot.
+#
+# Read the cached sysfs IDs rather than lspci, which reads PCI config space and
+# resumes runtime-suspended GPUs.
 nouveau_without_decoder() {
-  [[ ! -f ${OMARCHY_NVIDIA_MODPROBE_CONFIG:-/etc/modprobe.d/nvidia.conf} ]] &&
-    ! omarchy-hw-nvidia-gsp &&
-    omarchy-cmd-present lspci &&
-    LC_ALL=C lspci -k | grep -i 'Kernel driver in use: nouveau' >/dev/null
+  local device driver
+
+  if [[ -f ${OMARCHY_NVIDIA_MODPROBE_CONFIG:-/etc/modprobe.d/nvidia.conf} ]]; then
+    return 1
+  fi
+
+  for device in "${OMARCHY_PCI_DEVICES_PATH:-/sys/bus/pci/devices}"/*; do
+    [[ -e $device/driver ]] || continue
+    [[ $(<"$device/vendor") == "0x10de" && $(<"$device/class") == 0x03* ]] || continue
+    driver=$(readlink "$device/driver")
+    [[ ${driver##*/} == "nouveau" ]] || continue
+    if (( $(<"$device/device") < 0x1e00 )); then
+      return 0
+    fi
+  done
+
+  return 1
 }
 
 if omarchy-hw-aarch64-qualcomm; then

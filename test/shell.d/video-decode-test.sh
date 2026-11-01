@@ -14,23 +14,25 @@ cat >"$test_tmp/bin/omarchy-hw-aarch64-qualcomm" <<'STUB'
 #!/bin/bash
 [[ -e $OMARCHY_TEST_QUALCOMM ]]
 STUB
-# lspci reports nouveau only when the case asks for it.
-cat >"$test_tmp/bin/lspci" <<'STUB'
-#!/bin/bash
-printf '%s\n' '01:00.0 VGA compatible controller: NVIDIA Corporation GK104M'
-if [[ -e $OMARCHY_TEST_NOUVEAU ]]; then
-  printf '\t%s\n' 'Kernel driver in use: nouveau'
-fi
-STUB
-cat >"$test_tmp/bin/omarchy-hw-nvidia-gsp" <<'STUB'
-#!/bin/bash
-[[ -e $OMARCHY_TEST_GSP ]]
-STUB
-chmod +x "$test_tmp/bin/omarchy-hw-aarch64-qualcomm" "$test_tmp/bin/lspci" "$test_tmp/bin/omarchy-hw-nvidia-gsp"
+chmod +x "$test_tmp/bin/omarchy-hw-aarch64-qualcomm"
 export OMARCHY_TEST_QUALCOMM="$test_tmp/qualcomm"
-export OMARCHY_TEST_NOUVEAU="$test_tmp/nouveau"
 export OMARCHY_NVIDIA_MODPROBE_CONFIG="$test_tmp/nvidia.conf"
-export OMARCHY_TEST_GSP="$test_tmp/gsp"
+
+# Each case lays out the PCI GPUs it needs, as sysfs shows them.
+export OMARCHY_PCI_DEVICES_PATH="$test_tmp/pci"
+mkdir -p "$OMARCHY_PCI_DEVICES_PATH" "$test_tmp/drivers/nouveau" "$test_tmp/drivers/nvidia"
+add_gpu() {
+  local device="$OMARCHY_PCI_DEVICES_PATH/$1"
+  mkdir -p "$device"
+  printf '0x10de\n' >"$device/vendor"
+  printf '0x030000\n' >"$device/class"
+  printf '%s\n' "$2" >"$device/device"
+  ln -s "$test_tmp/drivers/$3" "$device/driver"
+}
+clear_gpus() {
+  find "$OMARCHY_PCI_DEVICES_PATH" -mindepth 1 -delete
+}
+
 export PATH="$test_tmp/bin:$ROOT/bin:$PATH"
 
 new_home() {
@@ -67,7 +69,7 @@ cmp -s "$shipped" "$home/.config/chromium-flags.conf" || fail "other machines ke
 [[ ! -e $home/.config/mpv ]] || fail "other machines get no mpv config"
 pass "other machines keep Chromium's flags and get no mpv config"
 
-touch "$OMARCHY_TEST_NOUVEAU"
+add_gpu 0000:01:00.0 0x11a0 nouveau
 home=$(new_home nouveau)
 cp "$shipped" "$home/.config/chromium-flags.conf"
 run_helper "$home"
@@ -91,12 +93,20 @@ run_helper "$home"
 pass "a GPU that switches to the NVIDIA driver on reboot keeps mpv's hardware decoding"
 rm "$OMARCHY_NVIDIA_MODPROBE_CONFIG"
 
-touch "$OMARCHY_TEST_GSP"
+clear_gpus
+add_gpu 0000:01:00.0 0x2484 nouveau
+add_gpu 0000:02:00.0 0x11a0 nvidia
 home=$(new_home nouveau-turing)
 run_helper "$home"
 [[ ! -e $home/.config/mpv ]] || fail "a Turing or newer GPU on nouveau gets no mpv config" "$(cat "$home/.config/mpv/mpv.conf")"
-pass "a Turing or newer GPU on nouveau keeps mpv's hardware decoding"
-rm "$OMARCHY_TEST_GSP" "$OMARCHY_TEST_NOUVEAU"
+pass "a Turing or newer GPU on nouveau, or an older one on another driver, keeps mpv's hardware decoding"
+
+add_gpu 0000:03:00.0 0x0fe4 nouveau
+home=$(new_home nouveau-mixed)
+run_helper "$home"
+grep -Fxq -- 'hwdec=no' "$home/.config/mpv/mpv.conf" || fail "an older GPU on nouveau next to a newer one still gets software decoding"
+pass "an older GPU on nouveau next to a newer one still gets software decoding"
+clear_gpus
 
 touch "$OMARCHY_TEST_QUALCOMM"
 home=$(new_home user-choices)
