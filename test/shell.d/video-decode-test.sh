@@ -22,10 +22,15 @@ if [[ -e $OMARCHY_TEST_NOUVEAU ]]; then
   printf '\t%s\n' 'Kernel driver in use: nouveau'
 fi
 STUB
-chmod +x "$test_tmp/bin/omarchy-hw-aarch64-qualcomm" "$test_tmp/bin/lspci"
+cat >"$test_tmp/bin/omarchy-hw-nvidia-gsp" <<'STUB'
+#!/bin/bash
+[[ -e $OMARCHY_TEST_GSP ]]
+STUB
+chmod +x "$test_tmp/bin/omarchy-hw-aarch64-qualcomm" "$test_tmp/bin/lspci" "$test_tmp/bin/omarchy-hw-nvidia-gsp"
 export OMARCHY_TEST_QUALCOMM="$test_tmp/qualcomm"
 export OMARCHY_TEST_NOUVEAU="$test_tmp/nouveau"
 export OMARCHY_NVIDIA_MODPROBE_CONFIG="$test_tmp/nvidia.conf"
+export OMARCHY_TEST_GSP="$test_tmp/gsp"
 export PATH="$test_tmp/bin:$ROOT/bin:$PATH"
 
 new_home() {
@@ -69,7 +74,7 @@ run_helper "$home"
 run_helper "$home"
 (( $(grep -cFx -- 'hwdec=no' "$home/.config/mpv/mpv.conf") == 1 )) || fail "nouveau mpv decodes in software once" "$(cat "$home/.config/mpv/mpv.conf")"
 cmp -s "$shipped" "$home/.config/chromium-flags.conf" || fail "nouveau keeps Chromium's flags" "$(cat "$home/.config/chromium-flags.conf")"
-pass "mpv on nouveau decodes in software, even when the helper runs twice"
+pass "mpv on nouveau with a GPU older than Turing decodes in software, even when the helper runs twice"
 
 home=$(new_home nouveau-user-hwdec)
 mkdir -p "$home/.config/mpv"
@@ -84,7 +89,14 @@ home=$(new_home nouveau-before-nvidia)
 run_helper "$home"
 [[ ! -e $home/.config/mpv ]] || fail "a GPU with the NVIDIA driver configured gets no mpv config" "$(cat "$home/.config/mpv/mpv.conf")"
 pass "a GPU that switches to the NVIDIA driver on reboot keeps mpv's hardware decoding"
-rm "$OMARCHY_NVIDIA_MODPROBE_CONFIG" "$OMARCHY_TEST_NOUVEAU"
+rm "$OMARCHY_NVIDIA_MODPROBE_CONFIG"
+
+touch "$OMARCHY_TEST_GSP"
+home=$(new_home nouveau-turing)
+run_helper "$home"
+[[ ! -e $home/.config/mpv ]] || fail "a Turing or newer GPU on nouveau gets no mpv config" "$(cat "$home/.config/mpv/mpv.conf")"
+pass "a Turing or newer GPU on nouveau keeps mpv's hardware decoding"
+rm "$OMARCHY_TEST_GSP" "$OMARCHY_TEST_NOUVEAU"
 
 touch "$OMARCHY_TEST_QUALCOMM"
 home=$(new_home user-choices)

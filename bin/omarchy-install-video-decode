@@ -1,13 +1,14 @@
 #!/bin/bash
 
-# omarchy:summary=Let mpv and Chromium decode video on the video chip of Snapdragon laptops, and keep mpv off nouveau's decoder
+# omarchy:summary=Let mpv and Chromium decode video on the video chip of Snapdragon laptops, and keep mpv off nouveau's decoder on older GPUs
 
 set -euo pipefail
 
 # The Snapdragon video chip is a V4L2 decoder. mpv's auto-safe list leaves V4L2
 # decoders out, and Arch Linux ARM's Chromium only turns its V4L2 decoder on
 # with ANGLE on GLES and the AcceleratedVideoDecoder feature. Other machines
-# keep both programs' defaults, except that mpv decodes in software on nouveau.
+# keep both programs' defaults, except that mpv decodes in software on nouveau
+# with a GPU older than Turing.
 
 # mpv reads this after /etc/mpv/mpv.conf. A global hwdec the user set stays as
 # it is. One inside a profile only applies with that profile, so the fallback
@@ -62,10 +63,12 @@ setup_chromium() {
 }
 
 # Mesa's VA-API driver for nouveau crashes mpv instead of failing over to
-# software, as it does on Kepler cards without the video firmware. A GPU with
-# the NVIDIA driver configured only runs nouveau until the next reboot.
-nouveau_in_use() {
+# software on GPUs older than Turing, which need video firmware nouveau can't
+# ship. Turing and newer decode through GSP firmware. A GPU with the NVIDIA
+# driver configured only runs nouveau until the next reboot.
+nouveau_without_decoder() {
   [[ ! -f ${OMARCHY_NVIDIA_MODPROBE_CONFIG:-/etc/modprobe.d/nvidia.conf} ]] &&
+    ! omarchy-hw-nvidia-gsp &&
     omarchy-cmd-present lspci &&
     LC_ALL=C lspci -k | grep -i 'Kernel driver in use: nouveau' >/dev/null
 }
@@ -78,6 +81,6 @@ if omarchy-hw-aarch64-qualcomm; then
   setup_mpv "# Fall back to the Snapdragon video chip's decoder (Omarchy)" 'hwdec=auto-safe,v4l2m2m-copy' || status=$?
   setup_chromium || status=$?
   exit "$status"
-elif nouveau_in_use; then
+elif nouveau_without_decoder; then
   setup_mpv "# nouveau's hardware decoder crashes mpv, so decode in software (Omarchy)" 'hwdec=no'
 fi
