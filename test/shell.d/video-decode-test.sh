@@ -14,8 +14,18 @@ cat >"$test_tmp/bin/omarchy-hw-aarch64-qualcomm" <<'STUB'
 #!/bin/bash
 [[ -e $OMARCHY_TEST_QUALCOMM ]]
 STUB
-chmod +x "$test_tmp/bin/omarchy-hw-aarch64-qualcomm"
+# lspci reports nouveau only when the case asks for it.
+cat >"$test_tmp/bin/lspci" <<'STUB'
+#!/bin/bash
+printf '%s\n' '01:00.0 VGA compatible controller: NVIDIA Corporation GK104M'
+if [[ -e $OMARCHY_TEST_NOUVEAU ]]; then
+  printf '\t%s\n' 'Kernel driver in use: nouveau'
+fi
+STUB
+chmod +x "$test_tmp/bin/omarchy-hw-aarch64-qualcomm" "$test_tmp/bin/lspci"
 export OMARCHY_TEST_QUALCOMM="$test_tmp/qualcomm"
+export OMARCHY_TEST_NOUVEAU="$test_tmp/nouveau"
+export OMARCHY_NVIDIA_MODPROBE_CONFIG="$test_tmp/nvidia.conf"
 export PATH="$test_tmp/bin:$ROOT/bin:$PATH"
 
 new_home() {
@@ -51,6 +61,30 @@ run_helper "$home"
 cmp -s "$shipped" "$home/.config/chromium-flags.conf" || fail "other machines keep Chromium's flags" "$(cat "$home/.config/chromium-flags.conf")"
 [[ ! -e $home/.config/mpv ]] || fail "other machines get no mpv config"
 pass "other machines keep Chromium's flags and get no mpv config"
+
+touch "$OMARCHY_TEST_NOUVEAU"
+home=$(new_home nouveau)
+cp "$shipped" "$home/.config/chromium-flags.conf"
+run_helper "$home"
+run_helper "$home"
+(( $(grep -cFx -- 'hwdec=no' "$home/.config/mpv/mpv.conf") == 1 )) || fail "nouveau mpv decodes in software once" "$(cat "$home/.config/mpv/mpv.conf")"
+cmp -s "$shipped" "$home/.config/chromium-flags.conf" || fail "nouveau keeps Chromium's flags" "$(cat "$home/.config/chromium-flags.conf")"
+pass "mpv on nouveau decodes in software, even when the helper runs twice"
+
+home=$(new_home nouveau-user-hwdec)
+mkdir -p "$home/.config/mpv"
+printf '%s\n' 'volume=80' 'hwdec=vaapi' >"$home/.config/mpv/mpv.conf"
+run_helper "$home"
+[[ $(cat "$home/.config/mpv/mpv.conf") == $'volume=80\nhwdec=vaapi' ]] ||
+  fail "an mpv hwdec the user set on nouveau stays as it is" "$(cat "$home/.config/mpv/mpv.conf")"
+pass "an mpv hwdec the user set on nouveau stays as it is"
+
+touch "$OMARCHY_NVIDIA_MODPROBE_CONFIG"
+home=$(new_home nouveau-before-nvidia)
+run_helper "$home"
+[[ ! -e $home/.config/mpv ]] || fail "a GPU with the NVIDIA driver configured gets no mpv config" "$(cat "$home/.config/mpv/mpv.conf")"
+pass "a GPU that switches to the NVIDIA driver on reboot keeps mpv's hardware decoding"
+rm "$OMARCHY_NVIDIA_MODPROBE_CONFIG" "$OMARCHY_TEST_NOUVEAU"
 
 touch "$OMARCHY_TEST_QUALCOMM"
 home=$(new_home user-choices)
